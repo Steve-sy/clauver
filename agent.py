@@ -91,7 +91,7 @@ class OutboundCaller(Agent):
             - Use `end_call` only after thanks and after you have finished your final spoken goodbye.
 
             ### ENDING THE CALL (CRITICAL)
-            When the task is complete:
+            When the task is complete, always follow this closing sequence before calling `end_call`:
             1. Briefly summarise the outcome in one sentence.
             2. Always thank the person.
             3. Say a short, warm thanks and goodbye.
@@ -266,7 +266,7 @@ async def entrypoint(ctx: JobContext):
             model="sonic-turbo",
             voice="a4a16c5e-5902-4732-b9b6-2a48efd2e11b",
         ),
-        llm=openai.LLM(model="gpt-5.3-chat-latest"),
+        llm=openai.LLM(model="gpt-5.4-mini"),
     )
 
     session_started = asyncio.create_task(
@@ -296,7 +296,7 @@ async def entrypoint(ctx: JobContext):
         agent.set_participant(participant)
 
         await session.say(
-            f"Hi, {agent.target_name if agent.target_name else 'there'} , good day! it's Clauver calling on behalf of {boss}.",
+            f"Hi, {agent.target_name if agent.target_name else 'there'} , good day! how are you?it's Clauver calling on behalf of {boss}.",
             allow_interruptions=True,
         )
 
