@@ -132,10 +132,9 @@ class OutboundCaller(Agent):
         """Called when the user wants to end the call"""
         logger.info(f"ending the call for {self.participant.identity}")
 
-        # let the agent finish speaking
-        current_speech = ctx.session.current_speech
-        if current_speech:
-            await current_speech.wait_for_playout()
+        # This is the correct way to let the agent finish speaking 
+        # before the tool finishes executing.
+        await ctx.wait_for_playout()
 
         await self.hangup()
 
@@ -234,12 +233,12 @@ async def entrypoint(ctx: JobContext):
         # turn_detection=EnglishModel(min_endpointing_delay=0.8),
         turn_detection=EnglishModel(),
         vad=silero.VAD.load(),
-        stt=deepgram.STT(model="deepgram/nova-3"),
+        stt=deepgram.STT(),
         # you can also use OpenAI's TTS with openai.TTS()
         # Aussie Voice ID integrated here
         tts=cartesia.TTS(
-            model="cartesia/sonic-3",
-            voice="7bc9f636-9f8d-4e20-928d-71a7d6e4f3a6" 
+            model="sonic-3",
+            voice="a4a16c5e-5902-4732-b9b6-2a48efd2e11b" 
         ),
         llm=openai.LLM(model="gpt-5.4-mini"), # Stable choice for high logic
         # you can also use a speech-to-speech model like OpenAI's Realtime API
