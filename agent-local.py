@@ -19,6 +19,9 @@ from livekit.agents import (
     cli,
     WorkerOptions,
     RoomInputOptions,
+    voice,
+    voice_assistant,
+    TurnHandlingOptions,
 )
 from livekit.plugins import (
     deepgram,
