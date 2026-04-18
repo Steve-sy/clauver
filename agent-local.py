@@ -241,7 +241,7 @@ async def entrypoint(ctx: JobContext):
     # the following uses gpt-4o, Deepgram and Cartesia
     session = AgentSession(
         # SIP TUNING: Wait longer for the human to finish speaking
-        turn_detection=EnglishModel(min_endpointing_delay=0.8),
+        turn_detection=EnglishModel(sentence_delay=0.8),
         #turn_detection=EnglishModel(),
         vad=silero.VAD.load(),
         stt=deepgram.STT(),
