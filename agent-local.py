@@ -13,6 +13,8 @@ from livekit.agents import (
     AgentSession,
     Agent,
     JobContext,
+    ProcessContext,
+    RoomOptions,
     function_tool,
     RunContext,
     get_job_context,
@@ -188,7 +190,7 @@ class OutboundCaller(Agent):
         logger.info(
             f"looking up availability for {self.participant.identity} on {date}"
         )
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(1)
         if isinstance(self.flexibility_time, list):
             return {"available_slots": self.flexibility_time}
         
@@ -242,15 +244,18 @@ async def entrypoint(ctx: JobContext):
         dial_info=dial_info,
     )
 
+    # Grab the pre-warmed VAD from userdata
+    warmed_vad = ctx.proc.userdata.get("vad") or silero.VAD.load()
+
     # the following uses gpt-4o, Deepgram and Cartesia
     session = AgentSession(
         # SIP TUNING: Wait longer for the human to finish speaking
         turn_handling=TurnHandlingOptions(
             turn_detection=EnglishModel(),
-            min_endpointing_delay=0.6, # This is where the delay lives
+            min_endpointing_delay=0.5, # This is where the delay lives
         ),
         # turn_detection=EnglishModel(),
-        vad=silero.VAD.load(),
+        vad=warmed_vad,
         stt=deepgram.STT(),
         # you can also use OpenAI's TTS with openai.TTS()
         # Aussie Voice ID integrated here
@@ -261,7 +266,7 @@ async def entrypoint(ctx: JobContext):
         llm=openai.LLM(model="gpt-5.3-chat-latest"), # Stable choice for high logic
         # you can also use a speech-to-speech model like OpenAI's Realtime API
         # llm=openai.realtime.RealtimeModel()
-        allow_interruptions=False,
+        # allow_interruptions=False,
     )
 
     # start the session first before dialing, to ensure that when the user picks up
@@ -270,11 +275,14 @@ async def entrypoint(ctx: JobContext):
         session.start(
             agent=agent,
             room=ctx.room,
-            room_input_options=RoomInputOptions(
-                # enable Krisp background voice and noise removal
-                # noise_cancellation=noise_cancellation.BVCTelephony(),
-                noise_cancellation=None,
+            room_options=RoomOptions(
+                inputs=RoomInputOptions(noise_cancellation=None)
             ),
+            # room_input_options=RoomInputOptions(
+            #     # enable Krisp background voice and noise removal
+            #     # noise_cancellation=noise_cancellation.BVCTelephony(),
+            #     noise_cancellation=None,
+            # ),
         )
     )
 
@@ -306,11 +314,16 @@ async def entrypoint(ctx: JobContext):
         )
         ctx.shutdown()
 
+def prewarm(proc: ProcessContext):
+    # Pre-loading the VAD model into the process memory
+    # This is what makes the "cold start" disappear
+    proc.userdata["vad"] = silero.VAD.load()
 
 if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
+            prewarm_fnc=prewarm,
             agent_name="clauver",
         )
     )
