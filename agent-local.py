@@ -331,10 +331,6 @@ async def entrypoint(ctx: JobContext):
     # start the session first before dialing, to ensure that when the user picks up
     # the agent does not miss anything the user says
     session_started = asyncio.create_task(
-        await session.say(
-            f"Hi, it's Clauver calling on behalf of {agent.boss}.",
-            # allow_interruptions=True,
-        ),
         session.start(
             room=ctx.room,
             agent=agent,
@@ -361,6 +357,11 @@ async def entrypoint(ctx: JobContext):
 
         # wait for the agent session start and participant join
         await session_started
+        # NOW it is safe to speak
+        await session.say(
+            f"Hi, it's Clauver calling on behalf of {agent.boss}.",
+            # allow_interruptions=True,
+        )
         participant = await ctx.wait_for_participant(identity=participant_identity)
         logger.info(f"participant joined: {participant.identity}")
 
