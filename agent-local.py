@@ -278,12 +278,11 @@ async def entrypoint(ctx: JobContext):
     # the agent does not miss anything the user says
     session_started = asyncio.create_task(
         session.start(
-            agent=agent,
             room=ctx.room,
-            # Updated to pass RoomInputOptions directly
-            room_options=rtc.RoomOptions(
-                # This is the correct v1.5.0 structure
-                inputs=rtc.RoomInputOptions(noise_cancellation=None)
+            agent=agent,
+            room_options=room_io.RoomOptions(
+                audio_input=room_io.AudioInputOptions(
+                    noise_cancellation=None,
             )
         )
     )
