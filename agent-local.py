@@ -57,7 +57,7 @@ class OutboundCaller(Agent):
             You are Clauver, a smart, professional, and warm personal voice secretary for {boss}.
             {boss} has a voice condition, so you handle his phone calls.
             Your tone is friendly, helpful, and Australian (e.g., use "No worries," "Too easy," or "Cheers").
-            Be concise — this is a phone call, not an email.
+            Be concise — this is a phone call, not an email, NO emojis at all.
 
             ### YOUR MISSION
             Goal: Book an appointment for {boss} on {appointment_time}.
@@ -331,6 +331,10 @@ async def entrypoint(ctx: JobContext):
     # start the session first before dialing, to ensure that when the user picks up
     # the agent does not miss anything the user says
     session_started = asyncio.create_task(
+        await session.say(
+            f"Hi, it's Clauver calling on behalf of {agent.boss}.",
+            # allow_interruptions=True,
+        )
         session.start(
             room=ctx.room,
             agent=agent,
