@@ -28,10 +28,8 @@ from livekit.plugins import (
 )
 from livekit.plugins.turn_detector.english import EnglishModel
 
-
-# load environment variables, this is optional, only used for local development
 load_dotenv(dotenv_path=".env.local")
-logger = logging.getLogger("outbound-caller")
+logger = logging.getLogger("clauver-general-agent")
 logger.setLevel(logging.INFO)
 
 outbound_trunk_id = os.getenv("SIP_OUTBOUND_TRUNK_ID")
@@ -41,32 +39,98 @@ class OutboundCaller(Agent):
     def __init__(
         self,
         *,
-        name: str,
-        appointment_time: str,
+        boss: str,
+        task: str,
         dial_info: dict[str, Any],
+        target_name: str | None = None,
     ):
         super().__init__(
             instructions=f"""
-            You are a scheduling assistant for a dental practice. Your interface with user will be voice.
-            You will be on a call with a patient who has an upcoming appointment. Your goal is to confirm the appointment details.
-            As a customer service representative, you will be polite and professional at all times. Allow user to end the conversation.
+            ### ROLE & TONE
+            You are Clauver, a smart, warm, and professional personal voice assistant for {boss}.
+            {boss} has a voice condition, so you are phone calling on his behalf.
+            Be concise — this is a phone call, not an email, NO emojis at all.
+            Your tone is calm, friendly, concise, and natural.
+            Sound Australian and human, but do not overdo it.
+            Keep responses short and phone-friendly.
 
-            When the user would like to be transferred to a human agent, first confirm with them. upon confirmation, use the transfer_call tool.
-            The customer's name is {name}. His appointment is on {appointment_time}.
+            ### YOUR MISSION
+            Your task is: {task}
+
+            ### CORE BEHAVIOUR
+            - Start politely and clearly explain you are calling on behalf of {boss}.
+            - Be transparent if asked: you are an AI assistant helping {boss} because he has a voice condition.
+            - If this is a message-delivery call, act like a respectful personal messenger for {boss}, not a sales or support bot.
+            - If the target person's name is known ({target_name if target_name else "not provided"}), use it naturally once at the start.
+            - Do not pretend to be {boss}.
+            - Stay focused on the task and move the call forward.
+            - If the other person is busy, confused, or asks for something outside your task, handle it politely and simply.
+
+            ### GENERAL CALL RULES
+            - For bookings, enquiries, confirmations, rescheduling, or simple admin tasks, gather the needed information and confirm key details clearly.
+            - When a person offers a date, time, price, or booking detail, restate it clearly before treating it as final.
+            - If something is unclear, ask one short clarifying question.
+            - Do not ramble.
+            - Do not talk like a chatbot.
+            - If the other person asks to speak directly with {boss}, explain briefly that {boss} is unable to speak right now, and offer to transfer if urgent.
+
+            ### MESSAGE DELIVERY RULES
+            - You may be asked to deliver a message on behalf of {boss}, not just make bookings or enquiries.
+            - For message-delivery calls, clearly state the message in a calm and natural way.
+            - If a target name {target_name} is known, use it naturally once near the start of the call.
+            - After delivering the message, pause and ask if they would like you to pass anything back to {boss}.
+            - If they give a reply, acknowledge it briefly and remember the important details.
+            - If they do not have a reply, acknowledge that politely, thank them and close the call.
+            - Do not force a long conversation. Keep message-delivery calls short, warm, and respectful.
+            - For personal or sensitive messages, be especially calm, clear, and human.
+
+            ### TOOL USAGE
+            - Use `transfer_call` only after the other person clearly wants to speak to a human and you have confirmed that.
+            - Use `handle_voicemail` if you reach voicemail or hear a beep.
+            - Use `save_result` when the task is clearly completed and you have the important outcome/details.
+            - Use `end_call` only after you have finished your final spoken goodbye.
+
+            ### ENDING THE CALL
+            When the task is complete:
+            1. Briefly summarise the outcome in one sentence.
+            2. Thank the person.
+            3. Say a short, warm goodbye.
+            4. Then call `end_call`.
+
+            Example:
+            "Perfect, I've got that sorted for {boss}. Thanks so much for your help. Have a lovely day, bye."
+
+            ### IF THE TASK CANNOT BE COMPLETED
+            - Politely collect the most useful outcome you can.
+            - If needed, say you will let {boss} know and he can follow up later.
+            - Then end the call politely.
+
+            ### IMPORTANT
+            - Allow the other person to finish speaking.
+            - If they interrupt, stop and listen.
+            - If they sound confused, slow down and explain simply.
+            - Never invent facts that were not said on the call.
             """
         )
-        # keep reference to the participant for transfers
-        self.participant: rtc.RemoteParticipant | None = None
 
+        self.participant: rtc.RemoteParticipant | None = None
         self.dial_info = dial_info
+        self.boss = boss
+        self.task = task
+        self.target_name = target_name
+        self.call_result: dict[str, Any] = {
+            "status": "unknown",
+            "outcome": None,
+            "details": [],
+        }
 
     def set_participant(self, participant: rtc.RemoteParticipant):
         self.participant = participant
 
     async def hangup(self):
         """Helper function to hang up the call by deleting the room"""
-
         job_ctx = get_job_context()
+        await asyncio.sleep(1)
         await job_ctx.api.room.delete_room(
             api.DeleteRoomRequest(
                 room=job_ctx.room.name,
@@ -75,21 +139,20 @@ class OutboundCaller(Agent):
 
     @function_tool()
     async def transfer_call(self, ctx: RunContext):
-        """Transfer the call to a human agent, called after confirming with the user"""
-
-        transfer_to = self.dial_info["transfer_to"]
+        """Transfer the call to a human after the other person clearly asks for it and confirms they want to be transferred."""
+        transfer_to = self.dial_info.get("transfer_to")
         if not transfer_to:
-            return "cannot transfer call"
+            return "No transfer number is available."
 
         logger.info(f"transferring call to {transfer_to}")
 
-        # let the message play fully before transferring
         await ctx.session.generate_reply(
-            instructions="let the user know you'll be transferring them"
+            instructions="Briefly let the person know you are transferring them now."
         )
 
         job_ctx = get_job_context()
         try:
+            await ctx.wait_for_playout()
             await job_ctx.api.sip.transfer_sip_participant(
                 api.TransferSIPParticipantRequest(
                     room_name=job_ctx.room.name,
@@ -97,116 +160,125 @@ class OutboundCaller(Agent):
                     transfer_to=f"tel:{transfer_to}",
                 )
             )
-
             logger.info(f"transferred call to {transfer_to}")
+            return "Call transferred successfully."
         except Exception as e:
             logger.error(f"error transferring call: {e}")
             await ctx.session.generate_reply(
-                instructions="there was an error transferring the call."
+                instructions="Apologise briefly and say the transfer did not work."
             )
+            await ctx.wait_for_playout()
             await self.hangup()
+            return "Transfer failed."
 
     @function_tool()
     async def end_call(self, ctx: RunContext):
-        """Called when the user wants to end the call"""
+        """Final tool before hanging up. Use only after your final summary, thanks, and goodbye have been spoken."""
         logger.info(f"ending the call for {self.participant.identity}")
 
-        # let the agent finish speaking
-        current_speech = ctx.session.current_speech
-        if current_speech:
-            await current_speech.wait_for_playout()
-
+        await ctx.wait_for_playout()
+        await asyncio.sleep(0.8)
         await self.hangup()
+        return "Call ended."
 
     @function_tool()
-    async def look_up_availability(
+    async def handle_voicemail(self, ctx: RunContext):
+        """Called when the call reaches voicemail or an answering machine beep."""
+        logger.info(f"detected voicemail for {self.participant.identity}")
+
+        msg_handle = await ctx.session.generate_reply(
+            instructions=f"""
+            Leave a short voicemail on behalf of {self.boss}.
+            State your name, say you are calling on behalf of {self.boss}, mention the purpose briefly,
+            ask them to call back if appropriate, then say thank you and goodbye.
+            Keep it short.
+            """
+        )
+
+        if msg_handle:
+            await msg_handle.wait_for_playout()
+
+        await asyncio.sleep(0.8)
+        await self.hangup()
+        return "Voicemail handled."
+
+    @function_tool()
+    async def save_result(
         self,
         ctx: RunContext,
-        date: str,
+        status: str,
+        outcome: str,
+        details: str = "",
     ):
-        """Called when the user asks about alternative appointment availability
+        """Save the result of the call once the task is complete or clearly blocked.
 
         Args:
-            date: The date of the appointment to check availability for
+            status: success, failed, voicemail, transferred, or follow_up_needed
+            outcome: short summary of what happened
+            details: any key details such as time, date, address, booking info, callback request, or next step
         """
         logger.info(
-            f"looking up availability for {self.participant.identity} on {date}"
+            f"saving result for {self.participant.identity}: status={status}, outcome={outcome}, details={details}"
         )
-        await asyncio.sleep(3)
-        return {
-            "available_times": ["1pm", "2pm", "3pm"],
+
+        self.call_result = {
+            "status": status,
+            "outcome": outcome,
+            "details": details,
         }
+        return "Result saved."
 
     @function_tool()
-    async def confirm_appointment(
-        self,
-        ctx: RunContext,
-        date: str,
-        time: str,
-    ):
-        """Called when the user confirms their appointment on a specific date.
-        Use this tool only when they are certain about the date and time.
-
-        Args:
-            date: The date of the appointment
-            time: The time of the appointment
-        """
-        logger.info(
-            f"confirming appointment for {self.participant.identity} on {date} at {time}"
-        )
-        return "reservation confirmed"
-
-    @function_tool()
-    async def detected_answering_machine(self, ctx: RunContext):
-        """Called when the call reaches voicemail. Use this tool AFTER you hear the voicemail greeting"""
-        logger.info(f"detected answering machine for {self.participant.identity}")
-        await self.hangup()
+    async def get_task_context(self, ctx: RunContext):
+        """Get the current task and any metadata passed into the call."""
+        return {
+            "boss": self.boss,
+            "task": self.task,
+            "dial_info": self.dial_info,
+        }
 
 
 async def entrypoint(ctx: JobContext):
     logger.info(f"connecting to room {ctx.room.name}")
     await ctx.connect()
 
-    # when dispatching the agent, we'll pass it the approriate info to dial the user
-    # dial_info is a dict with the following keys:
-    # - phone_number: the phone number to dial
-    # - transfer_to: the phone number to transfer the call to when requested
     dial_info = json.loads(ctx.job.metadata)
     participant_identity = phone_number = dial_info["phone_number"]
+    target_name = dial_info.get("target_name", None)
+    boss = dial_info.get("boss", "Max")
+    task = dial_info.get(
+        "task",
+        f"Call on behalf of {boss}, introduce yourself clearly, and help with their request.",
+    )
 
-    # look up the user's phone number and appointment details
     agent = OutboundCaller(
-        name="Jayden",
-        appointment_time="next Tuesday at 3pm",
+        target_name=target_name,
+        boss=boss,
+        task=task,
         dial_info=dial_info,
     )
 
-    # the following uses GPT-4o, Deepgram and Cartesia
     session = AgentSession(
         turn_detection=EnglishModel(),
         vad=silero.VAD.load(),
         stt=deepgram.STT(),
-        # you can also use OpenAI's TTS with openai.TTS()
-        tts=cartesia.TTS(),
-        llm=openai.LLM(model="gpt-4o"),
-        # you can also use a speech-to-speech model like OpenAI's Realtime API
-        # llm=openai.realtime.RealtimeModel()
+        tts=cartesia.TTS(
+            model="sonic-turbo",
+            voice="a4a16c5e-5902-4732-b9b6-2a48efd2e11b",
+        ),
+        llm=openai.LLM(model="gpt-5.3-chat-latest"),
     )
 
-    # start the session first before dialing, to ensure that when the user picks up
-    # the agent does not miss anything the user says
     session_started = asyncio.create_task(
         session.start(
             agent=agent,
             room=ctx.room,
             room_input_options=RoomInputOptions(
-                # enable Krisp background voice and noise removal
                 noise_cancellation=noise_cancellation.BVCTelephony(),
             ),
         )
     )
 
-    # `create_sip_participant` starts dialing the user
     try:
         await ctx.api.sip.create_sip_participant(
             api.CreateSIPParticipantRequest(
@@ -214,17 +286,19 @@ async def entrypoint(ctx: JobContext):
                 sip_trunk_id=outbound_trunk_id,
                 sip_call_to=phone_number,
                 participant_identity=participant_identity,
-                # function blocks until user answers the call, or if the call fails
                 wait_until_answered=True,
             )
         )
 
-        # wait for the agent session start and participant join
         await session_started
         participant = await ctx.wait_for_participant(identity=participant_identity)
         logger.info(f"participant joined: {participant.identity}")
-
         agent.set_participant(participant)
+
+        await session.say(
+            f"Hi, it's Clauver calling on behalf of {boss}.",
+            allow_interruptions=True,
+        )
 
     except api.TwirpError as e:
         logger.error(
@@ -239,6 +313,6 @@ if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
-            agent_name="outbound-caller",
+            agent_name="clauver-general",
         )
     )
