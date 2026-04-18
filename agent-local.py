@@ -13,7 +13,7 @@ from livekit.agents import (
     AgentSession,
     Agent,
     JobContext,
-    RoomOptions,
+    JobProcess,
     function_tool,
     RunContext,
     get_job_context,
@@ -227,6 +227,7 @@ async def entrypoint(ctx: JobContext):
     # dial_info is a dict with the following keys:
     # - phone_number: the phone number to dial
     # - transfer_to: the phone number to transfer the call to when requested
+
     dial_info = json.loads(ctx.job.metadata)
     phone_number = dial_info.get("phone_number")
     # Default task if you forget to send one
@@ -249,23 +250,29 @@ async def entrypoint(ctx: JobContext):
     # the following uses gpt-4o, Deepgram and Cartesia
     session = AgentSession(
         # SIP TUNING: Wait longer for the human to finish speaking
-        turn_handling=TurnHandlingOptions(
-            turn_detection=EnglishModel(),
-            min_endpointing_delay=0.5, # This is where the delay lives
-        ),
         # turn_detection=EnglishModel(),
+       turn_handling=TurnHandlingOptions(
+            turn_detection=EnglishModel(),
+            # Updated to v1.5.0 format
+            endpointing={
+                "min_delay": 0.5,
+                "max_delay": 3.0
+            },
+            interruption={
+                "enabled": True,
+                "mode": "adaptive"
+            },
+        ),
         vad=warmed_vad,
         stt=deepgram.STT(),
         # you can also use OpenAI's TTS with openai.TTS()
-        # Aussie Voice ID integrated here
         tts=cartesia.TTS(
             model="sonic-turbo",
             voice="a4a16c5e-5902-4732-b9b6-2a48efd2e11b"
         ),
-        llm=openai.LLM(model="gpt-5.3-chat-latest"), # Stable choice for high logic
+        llm=openai.LLM(model="gpt-5.3-chat-latest"),
         # you can also use a speech-to-speech model like OpenAI's Realtime API
         # llm=openai.realtime.RealtimeModel()
-        # allow_interruptions=False,
     )
 
     # start the session first before dialing, to ensure that when the user picks up
@@ -274,14 +281,10 @@ async def entrypoint(ctx: JobContext):
         session.start(
             agent=agent,
             room=ctx.room,
-            room_options=RoomOptions(
-                inputs=RoomInputOptions(noise_cancellation=None)
+            # Updated to pass RoomInputOptions directly
+            room_input_options=RoomInputOptions(
+                noise_cancellation=None,
             ),
-            # room_input_options=RoomInputOptions(
-            #     # enable Krisp background voice and noise removal
-            #     # noise_cancellation=noise_cancellation.BVCTelephony(),
-            #     noise_cancellation=None,
-            # ),
         )
     )
 
@@ -313,9 +316,10 @@ async def entrypoint(ctx: JobContext):
         )
         ctx.shutdown()
 
-def prewarm(proc: ProcessContext):
+def prewarm(proc: JobProcess):
     # Pre-loading the VAD model into the process memory
     # This is what makes the "cold start" disappear
+    logger.info("Prewarming VAD model...")
     proc.userdata["vad"] = silero.VAD.load()
 
 if __name__ == "__main__":
