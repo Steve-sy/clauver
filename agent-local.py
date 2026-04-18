@@ -19,7 +19,6 @@ from livekit.agents import (
     get_job_context,
     cli,
     WorkerOptions,
-    RoomInputOptions,
     TurnHandlingOptions,
 )
 from livekit.plugins import (
@@ -143,7 +142,7 @@ class OutboundCaller(Agent):
 
     @function_tool()
     async def end_call(self, ctx: RunContext):
-        """Called when the objective is met or the user wants to hang up."""
+        """Called when the objective is met or the user wants to hang up, you should end by okay, thank you! and then call this tool"""
         logger.info(f"ending the call for {self.participant.identity}")
 
         # This is the correct way to let the agent finish speaking 
@@ -229,6 +228,9 @@ async def entrypoint(ctx: JobContext):
     # - transfer_to: the phone number to transfer the call to when requested
 
     dial_info = json.loads(ctx.job.metadata)
+    # Grab the pre-warmed VAD from userdata
+    warmed_vad = ctx.proc.userdata.get("vad") or silero.VAD.load()
+
     phone_number = dial_info.get("phone_number")
     # Default task if you forget to send one
     task = dial_info.get("task", "Introduce yourself and ask how you can help Max.")
@@ -244,9 +246,6 @@ async def entrypoint(ctx: JobContext):
         dial_info=dial_info,
     )
 
-    # Grab the pre-warmed VAD from userdata
-    warmed_vad = ctx.proc.userdata.get("vad") or silero.VAD.load()
-
     # the following uses gpt-4o, Deepgram and Cartesia
     session = AgentSession(
         # SIP TUNING: Wait longer for the human to finish speaking
@@ -255,8 +254,8 @@ async def entrypoint(ctx: JobContext):
             turn_detection=EnglishModel(),
             # Updated to v1.5.0 format
             endpointing={
-                "min_delay": 0.5,
-                "max_delay": 3.0
+                "min_delay": 0.4,
+                "max_delay": 2.5
             },
             interruption={
                 "enabled": True,
@@ -282,9 +281,10 @@ async def entrypoint(ctx: JobContext):
             agent=agent,
             room=ctx.room,
             # Updated to pass RoomInputOptions directly
-            room_input_options=RoomInputOptions(
-                noise_cancellation=None,
-            ),
+            room_options=rtc.RoomOptions(
+                # This is the correct v1.5.0 structure
+                inputs=rtc.RoomInputOptions(noise_cancellation=None)
+            )
         )
     )
 
@@ -327,6 +327,7 @@ if __name__ == "__main__":
         WorkerOptions(
             entrypoint_fnc=entrypoint,
             prewarm_fnc=prewarm,
+            num_prewarm_processes=2,
             agent_name="clauver",
         )
     )
