@@ -18,6 +18,7 @@ from livekit.agents import (
     cli,
     WorkerOptions,
     RoomInputOptions,
+    TurnHandlingOptions,
 )
 from livekit.plugins import (
     deepgram,
