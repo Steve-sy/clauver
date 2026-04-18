@@ -69,7 +69,7 @@ class OutboundCaller(Agent):
             - State {boss}'s message clearly and naturally.
             - Then ask once if they would like you to pass anything back to {boss}.
             - WAIT for their answer before treating the task as complete.
-            - If they give a reply, acknowledge it briefly and remember the key words.
+            - If they give a reply, say thanks I'll pass that along to {boss}.
             - If they have nothing to add, acknowledge that and move to closing.
             - Keep the conversation short, warm, and respectful.
 
@@ -246,7 +246,7 @@ async def entrypoint(ctx: JobContext):
             turn_detection=EnglishModel(),
             # Updated to v1.5.0 format
             endpointing={
-                "min_delay": 0.3,
+                "min_delay": 0.2,
                 "max_delay": 1.25,
             },
             interruption={
@@ -291,7 +291,7 @@ async def entrypoint(ctx: JobContext):
 
         await session.say(
             f"Hi, {agent.target_name if agent.target_name else 'there'}, good day! how are you? I am calling on behalf of {boss}.",
-            allow_interruptions=True,
+            # allow_interruptions=True,
         )
 
     except api.TwirpError as e:
