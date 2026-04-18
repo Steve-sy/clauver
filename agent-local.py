@@ -32,7 +32,7 @@ from livekit.plugins.turn_detector.english import EnglishModel
 
 # load environment variables, this is optional, only used for local development
 load_dotenv(dotenv_path=".env.local")
-logger = logging.getLogger("outbound-caller")
+logger = logging.getLogger("clauver-agent")
 logger.setLevel(logging.INFO)
 
 outbound_trunk_id = os.getenv("SIP_OUTBOUND_TRUNK_ID")
@@ -42,24 +42,44 @@ class OutboundCaller(Agent):
     def __init__(
         self,
         *,
-        name: str,
+        task: str,
+        boss: str = "Max", # the owner name
         appointment_time: str,
+        flexibility_time: Any,
         dial_info: dict[str, Any],
     ):
+        # The core persona logic - using the task passed from Metadata
         super().__init__(
             instructions=f"""
-            You are a scheduling assistant for a dental practice. Your interface with user will be voice.
-            You will be on a call with a patient who has an upcoming appointment. Your goal is to confirm the appointment details.
-            As a customer service representative, you will be polite and professional at all times. Allow user to end the conversation.
+            You are Clauver, a smart and professional personal voice secretary for {boss}. 
+            {boss} has a health condition that makes his voice weak, so you are speaking on his behalf on a phone call.
+            Your goal is to make appointment for your {boss} on {appointment_time}.
+            Be polite, clear, and use a friendly Australian tone. Allow user to end the conversation.
+            
+            If the user says a time is unavailable, use look_up_availability. If those times also don't work, ask the user for their next best opening and tell them you will check with {boss} and call back
 
             When the user would like to be transferred to a human agent, first confirm with them. upon confirmation, use the transfer_call tool.
-            The customer's name is {name}. His appointment is on {appointment_time}.
+
+            YOUR SPECIFIC MISSION FOR THIS CALL:
+            {task}
+
+            Rules:
+            1. Introduce yourself immediately: "Hi, I'm Clauver, calling on behalf of {boss}."
+            2. Be concise. Don't ramble.
+            3. If you encounter a voicemail greeting or hear a beep, use the handle_voicemail tool to leave a short message and exit the call.
+            4. If you hear an automated menu, you can navigate it by speaking the numbers or options. For example, say 'One' to select the first option.
+            5. If the user asks to speak to {boss}, explain he's sick but you will transfer the call.
+            6. Use the end_call tool when the objective is met or the person hangs up.
             """
         )
         # keep reference to the participant for transfers
         self.participant: rtc.RemoteParticipant | None = None
 
         self.dial_info = dial_info
+
+        self.flexibility_time = flexibility_time
+        self.boss = boss
+        self.appointment_time = appointment_time
 
     def set_participant(self, participant: rtc.RemoteParticipant):
         self.participant = participant
@@ -120,12 +140,34 @@ class OutboundCaller(Agent):
         await self.hangup()
 
     @function_tool()
+    async def handle_voicemail(self, ctx: RunContext):
+        """
+        Called when the call reaches a voicemail greeting or an answering machine beep.
+        Use this tool to either leave a concise message or hang up if no message is needed.
+        """
+        logger.info(f"Voicemail detected for {self.participant.identity}")
+        
+        # Check if we should leave a message based on the task
+        # We tell the agent to generate a final goodbye/message
+        await ctx.session.generate_reply(
+            instructions=f"You have reached voicemail. Leave a 1-sentence message for {self.boss} regarding the task: '{self.dial_info.get('task')}', then say goodbye."
+        )
+
+        # Give the TTS enough time to finish speaking the message
+        # We use a dynamic wait or a safe buffer
+        await asyncio.sleep(6) 
+        
+        logger.info("Message left, ending call.")
+        await self.hangup()
+
+    @function_tool()
     async def look_up_availability(
         self,
         ctx: RunContext,
         date: str,
     ):
-        """Called when the user asks about alternative appointment availability
+        """Called when the current appointment_time is unavailable. 
+        Checks the boss's backup options and flexibility.
 
         Args:
             date: The date of the appointment to check availability for
@@ -134,9 +176,13 @@ class OutboundCaller(Agent):
             f"looking up availability for {self.participant.identity} on {date}"
         )
         await asyncio.sleep(3)
+        if isinstance(self.flexibility_time, list):
+            return {"available_slots": self.flexibility_time}
+        
         return {
-            "available_times": ["1pm", "2pm", "3pm"],
-        }
+        "general_availability_rules": self.flexibility_time,
+        "instructions": "If these times don't work, ask the recipient for their next opening."
+    }
 
     @function_tool()
     async def confirm_appointment(
@@ -145,7 +191,7 @@ class OutboundCaller(Agent):
         date: str,
         time: str,
     ):
-        """Called when the user confirms their appointment on a specific date.
+        """Called when the user confirms the appointment on a specific date.
         Use this tool only when they are certain about the date and time.
 
         Args:
@@ -157,39 +203,45 @@ class OutboundCaller(Agent):
         )
         return "reservation confirmed"
 
-    @function_tool()
-    async def detected_answering_machine(self, ctx: RunContext):
-        """Called when the call reaches voicemail. Use this tool AFTER you hear the voicemail greeting"""
-        logger.info(f"detected answering machine for {self.participant.identity}")
-        await self.hangup()
-
-
 async def entrypoint(ctx: JobContext):
-    logger.info(f"connecting to room {ctx.room.name}")
+    logger.info(f"Connecting to Clauver Room: {ctx.room.name}")
     await ctx.connect()
 
+    # --- METADATA PARSING LOGIC ---
+    # This pulls the 'task' and 'phone_number' from your CLI command
     # when dispatching the agent, we'll pass it the approriate info to dial the user
     # dial_info is a dict with the following keys:
     # - phone_number: the phone number to dial
     # - transfer_to: the phone number to transfer the call to when requested
     dial_info = json.loads(ctx.job.metadata)
+    phone_number = dial_info.get("phone_number")
+    # Default task if you forget to send one
+    task = dial_info.get("task", "Introduce yourself and ask how you can help Max.")
     participant_identity = phone_number = dial_info["phone_number"]
-
-    # look up the user's phone number and appointment details
+    appointment_time = dial_info.get("appointment_time", "today at 3pm")
+    flexibility_time = dial_info.get("flexibility_time", ["anytime this week"])
+    # look up the user's phone number and call details
     agent = OutboundCaller(
-        name="Jayden",
-        appointment_time="next Tuesday at 3pm",
+        task=task,
+        appointment_time=appointment_time,
+        flexibility_time=flexibility_time,
         dial_info=dial_info,
     )
 
-    # the following uses GPT-4o, Deepgram and Cartesia
+    # the following uses gpt-4o, Deepgram and Cartesia
     session = AgentSession(
+        # SIP TUNING: Wait longer for the human to finish speaking
+        # turn_detection=EnglishModel(min_endpointing_delay=0.8),
         turn_detection=EnglishModel(),
         vad=silero.VAD.load(),
-        stt=deepgram.STT(),
+        stt=deepgram.STT(model="deepgram/nova-3"),
         # you can also use OpenAI's TTS with openai.TTS()
-        tts=cartesia.TTS(),
-        llm=openai.LLM(model="gpt-5.4-mini"),
+        # Aussie Voice ID integrated here
+        tts=cartesia.TTS(
+            model="cartesia/sonic-3",
+            voice="7bc9f636-9f8d-4e20-928d-71a7d6e4f3a6" 
+        ),
+        llm=openai.LLM(model="gpt-5.4-mini"), # Stable choice for high logic
         # you can also use a speech-to-speech model like OpenAI's Realtime API
         # llm=openai.realtime.RealtimeModel()
     )
@@ -240,6 +292,6 @@ if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
-            agent_name="outbound-caller",
+            agent_name="clauver",
         )
     )
