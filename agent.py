@@ -308,8 +308,7 @@ async def entrypoint(ctx: JobContext):
         agent.set_participant(participant)
 
         await session.say(
-            f"Hi, {agent.target_name if agent.target_name else 'there'} , good day! how are you? 
-            it's Clauver calling on behalf of {boss}.",
+            f"Hi, {agent.target_name if agent.target_name else 'there'} , good day! how are you? it's Clauver calling on behalf of {boss}.",
             allow_interruptions=True,
         )
 
