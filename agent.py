@@ -88,13 +88,13 @@ class OutboundCaller(Agent):
             - Use `transfer_call` only after the other person clearly wants to speak to a human and you have confirmed that.
             - Use `handle_voicemail` if you reach voicemail or hear a beep.
             - Use `save_result` when the task is clearly completed and you have the important outcome/details.
-            - Use `end_call` only after you have finished your final spoken goodbye.
+            - Use `end_call` only after thanks and after you have finished your final spoken goodbye.
 
-            ### ENDING THE CALL
+            ### ENDING THE CALL (CRITICAL)
             When the task is complete:
             1. Briefly summarise the outcome in one sentence.
-            2. Thank the person.
-            3. Say a short, warm goodbye.
+            2. Always thank the person.
+            3. Say a short, warm thanks and goodbye.
             4. Then call `end_call`.
 
             Example:
@@ -296,7 +296,7 @@ async def entrypoint(ctx: JobContext):
         agent.set_participant(participant)
 
         await session.say(
-            f"Hi, it's Clauver calling on behalf of {boss}.",
+            f"Hi, {agent.target_name if agent.target_name else 'there'} , good day! it's Clauver calling on behalf of {boss}.",
             allow_interruptions=True,
         )
 
