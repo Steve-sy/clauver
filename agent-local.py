@@ -334,7 +334,7 @@ async def entrypoint(ctx: JobContext):
         await session.say(
             f"Hi, it's Clauver calling on behalf of {agent.boss}.",
             # allow_interruptions=True,
-        )
+        ),
         session.start(
             room=ctx.room,
             agent=agent,
