@@ -336,7 +336,8 @@ async def entrypoint(ctx: JobContext):
             agent=agent,
             room_options=room_io.RoomOptions(
                 audio_input=room_io.AudioInputOptions(
-                    noise_cancellation=noise_cancellation.BVCTelephony(),
+                # noise_cancellation=noise_cancellation.BVCTelephony(),
+                    noise_cancellation=None,
                 )
             )
         )
@@ -359,7 +360,7 @@ async def entrypoint(ctx: JobContext):
         await session_started
         # first 3s dead air
         await session.say(
-            f"Hello there, Good day!",
+            f"Hello there, Good day! Hi!",
             # allow_interruptions=True,
         )
         participant = await ctx.wait_for_participant(identity=participant_identity)
