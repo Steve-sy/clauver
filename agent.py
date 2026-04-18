@@ -82,11 +82,11 @@ class OutboundCaller(Agent):
             - Use `end_call` only after your final thanks and goodbye are fully spoken.
 
             Ending the call:
-            1. Briefly summarise what you will pass back to {boss}.
-            2. Thank them.
-            3. Say a short, warm goodbye.
-            4. If they add a final "thank you" or "bye", respond once very briefly.
-            5. Then call `end_call`.
+            1. Briefly summarise what you will pass back to {boss}, out loud.
+            2. You MUST always thank them explicitly (e.g. "Thanks for your help" or "Thanks for your time").
+            3. You MUST say a short, warm goodbye out loud (e.g. "Take care, bye").
+            4. Only after your spoken goodbye is fully finished, call `end_call`.
+            5. Do not call `end_call` before you have both thanked them and said goodbye.
 
             General rules:
             - Let them finish speaking.
@@ -210,16 +210,6 @@ class OutboundCaller(Agent):
         }
         return "Result saved."
 
-    @function_tool()
-    async def get_task_context(self, ctx: RunContext):
-        """Get the current task and any metadata passed into the call."""
-        return {
-            "boss": self.boss,
-            "task": self.task,
-            "dial_info": self.dial_info,
-        }
-
-
 async def entrypoint(ctx: JobContext):
     logger.info(f"connecting to room {ctx.room.name}")
     await ctx.connect()
@@ -247,7 +237,7 @@ async def entrypoint(ctx: JobContext):
             # Updated to v1.5.0 format
             endpointing={
                 "min_delay": 0.2,
-                "max_delay": 1.25,
+                "max_delay": 1.0,
             },
             interruption={
                 "enabled": True,
