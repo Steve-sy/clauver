@@ -327,7 +327,7 @@ if __name__ == "__main__":
         WorkerOptions(
             entrypoint_fnc=entrypoint,
             prewarm_fnc=prewarm,
-            num_prewarm_processes=2,
+            num_idle_processes=2,
             agent_name="clauver",
         )
     )
