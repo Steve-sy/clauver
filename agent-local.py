@@ -286,6 +286,7 @@ async def entrypoint(ctx: JobContext):
             )
         )
     )
+        )
 
     # `create_sip_participant` starts dialing the user
     try:
