@@ -259,7 +259,19 @@ async def entrypoint(ctx: JobContext):
     )
 
     session = AgentSession(
-        turn_detection=EnglishModel(),
+        # turn_detection=EnglishModel(),
+        turn_handling=TurnHandlingOptions(
+            turn_detection=EnglishModel(),
+            # Updated to v1.5.0 format
+            endpointing={
+                "min_delay": 0.25,
+                "max_delay": 1.25,
+            },
+            interruption={
+                "enabled": True,
+                "mode": "adaptive",
+            },
+        ),
         vad=silero.VAD.load(),
         stt=deepgram.STT(),
         tts=cartesia.TTS(
@@ -296,7 +308,8 @@ async def entrypoint(ctx: JobContext):
         agent.set_participant(participant)
 
         await session.say(
-            f"Hi, {agent.target_name if agent.target_name else 'there'} , good day! how are you?it's Clauver calling on behalf of {boss}.",
+            f"Hi, {agent.target_name if agent.target_name else 'there'} , good day! how are you? 
+            it's Clauver calling on behalf of {boss}.",
             allow_interruptions=True,
         )
 
