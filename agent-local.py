@@ -188,7 +188,7 @@ class OutboundCaller(Agent):
         logger.info(
             f"looking up availability for {self.participant.identity} on {date}"
         )
-        await asyncio.sleep(2)
+        await asyncio.sleep(1.5)
         if isinstance(self.flexibility_time, list):
             return {"available_slots": self.flexibility_time}
         
@@ -245,11 +245,11 @@ async def entrypoint(ctx: JobContext):
     # the following uses gpt-4o, Deepgram and Cartesia
     session = AgentSession(
         # SIP TUNING: Wait longer for the human to finish speaking
-        # turn_handling=TurnHandlingOptions(
-        #     turn_detection=EnglishModel(),
-        #     min_endpointing_delay=0.8, # This is where the delay lives now!
-        # ),
-        turn_detection=EnglishModel(),
+        turn_handling=TurnHandlingOptions(
+            turn_detection=EnglishModel(),
+            min_endpointing_delay=0.6, # This is where the delay lives
+        ),
+        # turn_detection=EnglishModel(),
         vad=silero.VAD.load(),
         stt=deepgram.STT(),
         # you can also use OpenAI's TTS with openai.TTS()
@@ -273,6 +273,7 @@ async def entrypoint(ctx: JobContext):
             room_input_options=RoomInputOptions(
                 # enable Krisp background voice and noise removal
                 # noise_cancellation=noise_cancellation.BVCTelephony(),
+                noise_cancellation=None,
             ),
         )
     )
