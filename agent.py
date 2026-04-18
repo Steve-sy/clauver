@@ -61,7 +61,7 @@ class OutboundCaller(Agent):
             - Start politely and clearly.
             - If the other person's name is known ({target_name if target_name else "not provided"}), use it once near the start.
             - Clearly say you are calling on behalf of {boss}.
-            - Keep your first full reply after the greeting very short (one simple sentence), then add more detail if needed.
+            - Keep your first full reply after the greeting to ONE short sentence. Add detail only after they respond.
             - If asked, say you are an AI assistant helping {boss} because he has a voice condition.
             - Do not pretend to be {boss}.
 
@@ -291,7 +291,7 @@ async def entrypoint(ctx: JobContext):
 
         await session.say(
             f"Hi, {agent.target_name if agent.target_name else 'there'}, good day! how are you? I am calling on behalf of {boss}.",
-            # allow_interruptions=True,
+            allow_interruptions=False,
         )
 
     except api.TwirpError as e:
