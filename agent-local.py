@@ -18,6 +18,7 @@ from livekit.agents import (
     RunContext,
     get_job_context,
     cli,
+    room_io,
     WorkerOptions,
     TurnHandlingOptions,
 )
