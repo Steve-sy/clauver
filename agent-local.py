@@ -336,11 +336,11 @@ async def entrypoint(ctx: JobContext):
             agent=agent,
             room_options=room_io.RoomOptions(
                 audio_input=room_io.AudioInputOptions(
-                    noise_cancellation=None,
+                    noise_cancellation=noise_cancellation.BVCTelephony(),
+                )
             )
         )
     )
-        )
 
     # `create_sip_participant` starts dialing the user
     try:
@@ -357,9 +357,9 @@ async def entrypoint(ctx: JobContext):
 
         # wait for the agent session start and participant join
         await session_started
-        # NOW it is safe to speak
+        # first 3s dead air
         await session.say(
-            f"Hi, it's Clauver calling on behalf of {agent.boss}.",
+            f"Hello there, Good day!",
             # allow_interruptions=True,
         )
         participant = await ctx.wait_for_participant(identity=participant_identity)
