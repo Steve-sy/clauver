@@ -34,7 +34,7 @@ from livekit.plugins.turn_detector.english import EnglishModel
 
 # load environment variables, this is optional, only used for local development
 load_dotenv(dotenv_path=".env.local")
-logger = logging.getLogger("clauver-agent")
+logger = logging.getLogger("outbound-clauver")
 logger.setLevel(logging.INFO)
 
 outbound_trunk_id = os.getenv("SIP_OUTBOUND_TRUNK_ID")
@@ -202,7 +202,7 @@ class OutboundCaller(Agent):
         # This is the correct way to let the agent finish speaking 
         # before the tool finishes executing.
         await ctx.wait_for_playout()
-        await asyncio.sleep(0.8)
+        await asyncio.sleep(0.5)
         await self.hangup()
 
     @function_tool()
@@ -308,7 +308,7 @@ async def entrypoint(ctx: JobContext):
             turn_detection=EnglishModel(),
             # Updated to v1.5.0 format
             endpointing={
-                "min_delay": 0.35,
+                "min_delay": 0.3,
                 "max_delay": 1.5,
             },
             interruption={
@@ -332,12 +332,12 @@ async def entrypoint(ctx: JobContext):
     # the agent does not miss anything the user says
     session_started = asyncio.create_task(
         session.start(
-            room=ctx.room,
             agent=agent,
+            room=ctx.room,
             room_options=room_io.RoomOptions(
                 audio_input=room_io.AudioInputOptions(
-                # noise_cancellation=noise_cancellation.BVCTelephony(),
-                    noise_cancellation=None,
+                noise_cancellation=noise_cancellation.BVCTelephony(),
+                    # noise_cancellation=None,
                 )
             )
         )
@@ -388,6 +388,6 @@ if __name__ == "__main__":
             entrypoint_fnc=entrypoint,
             prewarm_fnc=prewarm,
             num_idle_processes=2,
-            agent_name="clauver",
+            agent_name="outbound-clauver",
         )
     )
