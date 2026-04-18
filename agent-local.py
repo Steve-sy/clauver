@@ -74,7 +74,7 @@ class OutboundCaller(Agent):
             - **Confirming:** Only call `confirm_appointment` when the user has clearly agreed to a specific slot.
 
             ### ENDING THE CALL (CRITICAL)
-            - You must ALWAYS say a final goodbye and thank the person (e.g., "Thanks for your help, have a gold one, bye!") BEFORE calling the `end_call` tool. 
+            - You must ALWAYS say a final goodbye and thank the person (e.g., "Thanks for your help, have a good one, bye!") BEFORE calling the `end_call` tool. 
             - Never trigger `end_call` while you are still speaking. 
             - Use `end_call` only when the objective is met or the user clearly wants to hang up.
 
@@ -100,6 +100,7 @@ class OutboundCaller(Agent):
         """Helper function to hang up the call by deleting the room"""
 
         job_ctx = get_job_context()
+        await asyncio.sleep(1)
         await job_ctx.api.room.delete_room(
             api.DeleteRoomRequest(
                 room=job_ctx.room.name,
@@ -141,7 +142,7 @@ class OutboundCaller(Agent):
 
     @function_tool()
     async def end_call(self, ctx: RunContext):
-        """Called when the user wants to end the call"""
+        """Called when the objective is met or the user wants to hang up."""
         logger.info(f"ending the call for {self.participant.identity}")
 
         # This is the correct way to let the agent finish speaking 
@@ -160,14 +161,15 @@ class OutboundCaller(Agent):
         
         # Check if we should leave a message based on the task
         # We tell the agent to generate a final goodbye/message
-        await ctx.session.generate_reply(
-            instructions=f"You have reached voicemail. Leave a 1-sentence message for {self.boss} regarding the task: '{self.dial_info.get('task')}', then say goodbye."
+        msg_handle = await ctx.session.generate_reply(
+            instructions=f"Leave a brief message on behalf of your boss {self.boss} about {self.dial_info.get('task')}. Be quick."
         )
 
-        # Give the TTS enough time to finish speaking the message
-        # We use a dynamic wait or a safe buffer
-        await asyncio.sleep(6) 
-        
+        # Wait for that specific message to play out
+        if msg_handle:
+            await msg_handle.wait_for_playout()
+
+        await asyncio.sleep(1)
         logger.info("Message left, ending call.")
         await self.hangup()
 
@@ -186,7 +188,7 @@ class OutboundCaller(Agent):
         logger.info(
             f"looking up availability for {self.participant.identity} on {date}"
         )
-        await asyncio.sleep(3)
+        await asyncio.sleep(2)
         if isinstance(self.flexibility_time, list):
             return {"available_slots": self.flexibility_time}
         
@@ -231,6 +233,7 @@ async def entrypoint(ctx: JobContext):
     participant_identity = phone_number = dial_info["phone_number"]
     appointment_time = dial_info.get("appointment_time", "today at 3pm")
     flexibility_time = dial_info.get("flexibility_time", ["anytime this week"])
+    
     # look up the user's phone number and call details
     agent = OutboundCaller(
         task=task,
@@ -242,11 +245,11 @@ async def entrypoint(ctx: JobContext):
     # the following uses gpt-4o, Deepgram and Cartesia
     session = AgentSession(
         # SIP TUNING: Wait longer for the human to finish speaking
-        turn_handling=TurnHandlingOptions(
-            turn_detection=EnglishModel(),
-            min_endpointing_delay=0.8, # This is where the delay lives now!
-        ),
-        #turn_detection=EnglishModel(),
+        # turn_handling=TurnHandlingOptions(
+        #     turn_detection=EnglishModel(),
+        #     min_endpointing_delay=0.8, # This is where the delay lives now!
+        # ),
+        turn_detection=EnglishModel(),
         vad=silero.VAD.load(),
         stt=deepgram.STT(),
         # you can also use OpenAI's TTS with openai.TTS()
@@ -269,7 +272,7 @@ async def entrypoint(ctx: JobContext):
             room=ctx.room,
             room_input_options=RoomInputOptions(
                 # enable Krisp background voice and noise removal
-                noise_cancellation=noise_cancellation.BVCTelephony(),
+                # noise_cancellation=noise_cancellation.BVCTelephony(),
             ),
         )
     )
