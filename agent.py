@@ -218,6 +218,9 @@ async def entrypoint(ctx: JobContext):
     await ctx.connect()
 
     dial_info = json.loads(ctx.job.metadata)
+    # log to remove later
+    logger.info(f"dispatch metadata: {ctx.job.metadata}")
+
     participant_identity = phone_number = dial_info["phone_number"]
     target_name = dial_info.get("target_name", None)
     boss = dial_info.get("boss", "Max")

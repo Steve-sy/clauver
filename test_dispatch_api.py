@@ -39,10 +39,10 @@ async def main() -> None:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "phone_number": os.getenv("CLAUVER_TEST_PHONE_NUMBER", "+61000000000"),
         "boss": os.getenv("CLAUVER_TEST_BOSS", "Max"),
-        "target_name": os.getenv("CLAUVER_TEST_TARGET_NAME", "Patrick"),
+        "target_name": os.getenv("CLAUVER_TEST_TARGET_NAME", "Steve"),
         "task": os.getenv(
             "CLAUVER_TEST_TASK",
-            "Tell Patrick that Max is sick today and will not be coming to work."
+            "Tell Steve that Max is sick today and will not be coming to work."
         ),
     }
 
