@@ -12,12 +12,13 @@ from livekit.agents import (
     AgentSession,
     Agent,
     JobContext,
+    room_io,
+    JobProcess,
     function_tool,
     RunContext,
     get_job_context,
     cli,
     WorkerOptions,
-    RoomInputOptions,
     TurnHandlingOptions,
 )
 from livekit.plugins import (
@@ -28,8 +29,9 @@ from livekit.plugins import (
     noise_cancellation,  # noqa: F401
 )
 from livekit.plugins.turn_detector.english import EnglishModel
+from requests import session
 
-load_dotenv(dotenv_path=".env.local")
+load_dotenv(dotenv_path=".env")
 logger = logging.getLogger("clauver-general-agent")
 logger.setLevel(logging.INFO)
 
@@ -162,7 +164,7 @@ class OutboundCaller(Agent):
         logger.info(f"ending the call for {self.participant.identity}")
 
         await ctx.wait_for_playout()
-        await asyncio.sleep(0.8)
+        await asyncio.sleep(1)
         await self.hangup()
         return "Call ended."
 
@@ -211,7 +213,16 @@ class OutboundCaller(Agent):
             "outcome": outcome,
             "details": details,
         }
-        return "Result saved."
+
+        await ctx.session.generate_reply(
+            instructions=(
+                f"Briefly and very shortly summarise what you will pass back to {self.boss}. "
+                f"Then explicitly thank them for their time or help, and say a short warm goodbye. "
+                f"Keep it natural and concise."
+            )
+        )
+
+        return "Result saved and final closing spoken."
 
 async def entrypoint(ctx: JobContext):
     logger.info(f"connecting to room {ctx.room.name}")
@@ -242,15 +253,15 @@ async def entrypoint(ctx: JobContext):
             turn_detection=EnglishModel(),
             # Updated to v1.5.0 format
             endpointing={
-                "min_delay": 0.2,
-                "max_delay": 1.0,
+                "min_delay": 0.15,
+                "max_delay": 0.8,
             },
             interruption={
-                "enabled": True,
+                "enabled": False,
                 "mode": "adaptive",
             },
         ),
-        vad=silero.VAD.load(),
+        vad=ctx.proc.userdata["vad"],
         stt=deepgram.STT(),
         tts=cartesia.TTS(
             model="sonic-turbo",
@@ -263,8 +274,13 @@ async def entrypoint(ctx: JobContext):
         session.start(
             agent=agent,
             room=ctx.room,
-            room_input_options=RoomInputOptions(
-                noise_cancellation=noise_cancellation.BVCTelephony(),
+            room_options=room_io.RoomOptions(
+                audio_input=room_io.AudioInputOptions(
+                    noise_cancellation=noise_cancellation.BVCTelephony(),
+                    pre_connect_audio=True,
+                    # auto_gain_control=True,
+                    # pre_connect_audio_timeout=3.0,
+                ),
             ),
         )
     )
@@ -298,11 +314,15 @@ async def entrypoint(ctx: JobContext):
         )
         ctx.shutdown()
 
-
+def prewarm(proc: JobProcess):
+    proc.userdata["vad"] = silero.VAD.load()
+    
 if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
+            prewarm_fnc=prewarm,
             agent_name="clauver-general",
+            num_idle_processes=2,
         )
     )

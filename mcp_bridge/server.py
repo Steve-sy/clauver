@@ -73,7 +73,7 @@ async def call_tool(
         phone_number=args.get("phone_number"),
         task=args.get("task"),
         target_name=args.get("target_name"),
-        boss=args.get("boss", "Max"),
+        boss=args.get("boss", "boss"),
     )
 
     return [

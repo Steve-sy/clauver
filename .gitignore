@@ -6,8 +6,9 @@ Thumbs.db
 .env
 .env.local
 .flaskenv
-.venv/
-venv/
+.venv*/
+venv*/
+
 
 # cache and log files
 __pycache__/
