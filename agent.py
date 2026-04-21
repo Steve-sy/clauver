@@ -302,7 +302,7 @@ async def entrypoint(ctx: JobContext):
         agent.set_participant(participant)
 
         await session.say(
-            f"Hi, {agent.target_name if agent.target_name else 'there'}, good day! how are you? I am calling on behalf of {boss}.",
+            f"Hi, {agent.target_name if agent.target_name else 'there'}, this is Clauver, I'm AI assistant calling on behalf of {boss}. One moment please while I pull up the info, thanks for your patience.",
             allow_interruptions=False,
         )
 
