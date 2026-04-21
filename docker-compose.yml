@@ -1,0 +1,20 @@
+services:
+  clauver-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: clauver-agent
+    env_file:
+      - .env
+    environment:
+      # AGENT_MODE selects which worker to run:
+      #   default → agent.py (general, OpenAI/Deepgram/etc)
+      #   cloud   → agent-cloud.py (LiveKit-only booking agent)
+      #   local   → agent-local.py (local booking agent with external keys)
+      AGENT_MODE: ${AGENT_MODE:-default}
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+    command: []  # use default entrypoint behaviour
