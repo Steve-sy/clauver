@@ -2,6 +2,9 @@
   "version": "1.3",
   "updated_at": "2026-04-28T00:00:00Z",
   "providers": {
+    "openrouter": {
+      "default_model": "openrouter/free"
+    },
     "openai": {
       "default_model": "gpt-5.4-nano",
       "additional_visible_models": [
@@ -44,9 +47,6 @@
           "display_name": "Gemini 3 Flash"
         }
       ]
-    },
-    "openrouter": {
-      "default_model": "openrouter/free"
     }
   }
 }
